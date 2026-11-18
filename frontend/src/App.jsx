@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, BrainCircuit, FileText, Globe, Link2, LoaderCircle, MessageSquareText, Plus, Search, Send, Sparkles, Trash2, X } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 const dateLabel = value => new Date(value + (value.endsWith('Z') ? '' : 'Z')).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 export default function App() {

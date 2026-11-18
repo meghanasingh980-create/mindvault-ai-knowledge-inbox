@@ -29,7 +29,8 @@ export async function answerQuestion(question) {
 
   const queryEmbedding = await generateEmbedding(question);
 
-  const storedChunks = db.prepare(`
+  // Retrieve saved chunks from Neon PostgreSQL.
+  const { rows: storedChunks } = await db.query(`
     SELECT
       chunks.id,
       chunks.item_id,
@@ -41,7 +42,7 @@ export async function answerQuestion(question) {
     FROM chunks
     INNER JOIN items ON items.id = chunks.item_id
     WHERE chunks.embedding IS NOT NULL
-  `).all();
+  `);
 
   if (storedChunks.length === 0) {
     return {
@@ -69,68 +70,67 @@ export async function answerQuestion(question) {
     groupedItems.get(chunk.item_id).push(chunk);
   }
 
-  
-// Rank saved items using their best matching chunk.
-const allItems = Array.from(groupedItems.values())
-  .map((chunks) => {
-    const sortedChunks = chunks.sort(
-      (a, b) => b.score - a.score
-    );
+  // Rank saved items using their best matching chunk.
+  const allItems = Array.from(groupedItems.values())
+    .map((chunks) => {
+      const sortedChunks = chunks.sort(
+        (a, b) => b.score - a.score
+      );
 
-    return {
-      item: sortedChunks[0],
-      chunks: sortedChunks.slice(0, CHUNKS_PER_ITEM),
-      score: sortedChunks[0].score,
-    };
+      return {
+        item: sortedChunks[0],
+        chunks: sortedChunks.slice(0, CHUNKS_PER_ITEM),
+        score: sortedChunks[0].score,
+      };
+    });
+
+  // Give priority to saved items whose titles match the question.
+  const stopWords = new Set([
+    "what", "is", "the", "a", "an", "about",
+    "tell", "me", "show", "find", "explain",
+    "give", "please", "can", "you", "for",
+    "of", "in", "on", "to", "and", "my",
+    "saved", "note", "notes", "website", "webpage",
+  ]);
+
+  const queryKeywords = question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 1 && !stopWords.has(word));
+
+  const titleMatchedItems = allItems.filter(({ item }) => {
+    const title = item.title.toLowerCase();
+
+    const isUrlTitle =
+      title.startsWith("http://") ||
+      title.startsWith("https://") ||
+      title.startsWith("www.");
+
+    const searchableTitle = `${title} ${item.source_url || ""}`
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ");
+
+    const titleWords = searchableTitle.split(/\s+/);
+    const normalizedUrlTitle = searchableTitle.replace(/\s/g, "");
+
+    return (
+      queryKeywords.length > 0 &&
+      queryKeywords.every((word) =>
+        titleWords.includes(word) ||
+        (isUrlTitle && normalizedUrlTitle.includes(word))
+      )
+    );
   });
 
-// Give priority to saved items whose titles match the question.
-const stopWords = new Set([
-  "what", "is", "the", "a", "an", "about",
-  "tell", "me", "show", "find", "explain",
-  "give", "please", "can", "you", "for",
-  "of", "in", "on", "to", "and", "my",
-  "saved", "note", "notes", "website", "webpage",
-]);
+  // If a title matches, exclude unrelated saved items.
+  const candidates = titleMatchedItems.length > 0
+    ? titleMatchedItems
+    : allItems;
 
-const queryKeywords = question
-  .toLowerCase()
-  .replace(/[^a-z0-9\s]/g, " ")
-  .split(/\s+/)
-  .filter((word) => word.length > 1 && !stopWords.has(word));
-
-
-const titleMatchedItems = allItems.filter(({ item }) => {
-  const title = item.title.toLowerCase();
-
-  const titleWords = title
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/);
-
-  const isUrlTitle =
-    title.startsWith("http://") ||
-    title.startsWith("https://") ||
-    title.startsWith("www.");
-
-  return (
-    queryKeywords.length > 0 &&
-    (
-      isUrlTitle ||
-      queryKeywords.every((word) => titleWords.includes(word))
-    )
-  );
-});
-
-
-// If a title matches, exclude unrelated saved items.
-const candidates = titleMatchedItems.length > 0
-  ? titleMatchedItems
-  : allItems;
-
-const relevantItems = candidates
-  .sort((a, b) => b.score - a.score)
-  .slice(0, TOP_K);
-
+  const relevantItems = candidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_K);
 
   // Each saved item receives only one source number.
   const context = relevantItems

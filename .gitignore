@@ -13,3 +13,6 @@ backend/server/data/
 
 # Production frontend build
 frontend/dist/
+
+# Old SQLite backup file
+backend/server/src/database.sqlite-backup.js

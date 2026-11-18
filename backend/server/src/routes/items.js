@@ -5,9 +5,9 @@ import db from "../database.js";
 const router = express.Router();
 
 // Get all saved items
-router.get("/", (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
-    const items = db.prepare(`
+    const result = await db.query(`
       SELECT
         items.id,
         items.title,
@@ -15,17 +15,16 @@ router.get("/", (req, res, next) => {
         items.source_type,
         items.source_url,
         items.created_at,
-        COUNT(chunks.id) AS chunk_count
+        COUNT(chunks.id)::INTEGER AS chunk_count
       FROM items
       LEFT JOIN chunks ON items.id = chunks.item_id
       GROUP BY items.id
       ORDER BY items.created_at DESC, items.id DESC
-    `).all();
+    `);
 
-    res.status(200).json({
+    return res.json({
       success: true,
-      count: items.length,
-      items,
+      items: result.rows,
     });
   } catch (error) {
     next(error);
@@ -33,44 +32,32 @@ router.get("/", (req, res, next) => {
 });
 
 // Delete a saved item
-router.delete("/:id", (req, res, next) => {
+router.delete("/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({
         success: false,
-        error: "Invalid item ID",
+        message: "Invalid item ID.",
       });
     }
 
-    const existingItem = db.prepare(
-      "SELECT id FROM items WHERE id = ?"
-    ).get(id);
+    const result = await db.query(
+      "DELETE FROM items WHERE id = $1 RETURNING id",
+      [id]
+    );
 
-    if (!existingItem) {
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        error: "Item not found",
+        message: "Item not found.",
       });
     }
 
-    const deleteTransaction = db.transaction(() => {
-      db.prepare(
-        "DELETE FROM chunks WHERE item_id = ?"
-      ).run(id);
-
-      db.prepare(
-        "DELETE FROM items WHERE id = ?"
-      ).run(id);
-    });
-
-    deleteTransaction();
-
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: "Item deleted successfully",
-      id,
+      message: "Item deleted successfully.",
     });
   } catch (error) {
     next(error);
