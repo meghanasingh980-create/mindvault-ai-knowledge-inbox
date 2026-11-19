@@ -61,20 +61,25 @@ app.use((req, res) => {
   });
 });
 
+
 app.use((error, _req, res, _next) => {
-  console.error('SERVER ERROR:', error);
+  console.error("SERVER ERROR:", error);
 
   const status =
     error.status ||
-    (error.name === 'AbortError' ? 504 : 500);
+    (error.name === "AbortError" ? 504 : 500);
+
+  const message =
+    status >= 500
+      ? "An internal server error occurred. Please try again later."
+      : error.message || "Request failed.";
 
   res.status(status).json({
-    error: error.message || 'Unknown server error',
-    ...(process.env.NODE_ENV !== 'production'
-      ? { details: error.stack }
-      : {})
+    success: false,
+    error: message,
   });
 });
+
 
 const port = process.env.PORT || 5000;
 

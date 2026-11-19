@@ -4,9 +4,12 @@ node_modules/
 
 # Environment variables and secrets
 .env
+.env.*
+!.env.example
 
 # Operating system files
 .DS_Store
+Thumbs.db
 
 # Local SQLite database and user data
 backend/server/data/

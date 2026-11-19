@@ -18,7 +18,7 @@ function getGeminiClient() {
 }
 
 // Updated Google embedding model
-const EMBEDDING_MODEL = "gemini-embedding-001";;
+const EMBEDDING_MODEL = "gemini-embedding-001";
 
 export async function generateEmbedding(text) {
   if (typeof text !== "string" || !text.trim()) {
